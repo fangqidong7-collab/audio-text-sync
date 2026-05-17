@@ -145,13 +145,19 @@ export default function App() {
   }, [segments, currentTime]);
 
   // 自动滚动到当前段落（只在阅读区内部滚动，不会带飞整个页面）
+  // 用 getBoundingClientRect 计算相对偏移，避开 offsetTop 受 offsetParent 影响的坑。
   useEffect(() => {
     if (activeId === null) return;
     const reader = readerRef.current;
     const el = document.getElementById(`seg-${activeId}`);
     if (!reader || !el) return;
+    const elRect = el.getBoundingClientRect();
+    const rdRect = reader.getBoundingClientRect();
     const target =
-      el.offsetTop - reader.clientHeight / 2 + el.clientHeight / 2;
+      reader.scrollTop +
+      (elRect.top - rdRect.top) -
+      reader.clientHeight / 2 +
+      el.clientHeight / 2;
     reader.scrollTo({ top: target, behavior: 'smooth' });
   }, [activeId]);
 

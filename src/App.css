@@ -185,6 +185,7 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .reader {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
