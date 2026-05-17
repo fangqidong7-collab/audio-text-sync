@@ -31,14 +31,18 @@ function fmtTime(t: number | undefined): string {
 
 // 调试日志开关：上线时改 false 即可。
 const DBG = true;
-const log = (...a: unknown[]) => {
-  if (DBG) console.log('[ats]', ...a);
-};
 
 export default function Reader({ initialEntry, onBack }: Props) {
   const [entry, setEntry] = useState<LibraryEntry>(initialEntry);
 
-  // 仅在第一次挂载时打印 initialEntry，便于核对 IDB 起点。
+  // 每个 Reader 实例分配一个短 ID，便于在 StrictMode/HMR 下区分日志归属。
+  const mountIdRef = useRef<string>(
+    Math.random().toString(36).slice(2, 6),
+  );
+  const log = (...a: unknown[]) => {
+    if (DBG) console.log('[ats]', `[${mountIdRef.current}]`, ...a);
+  };
+
   useEffect(() => {
     log('reader mount', {
       hash: initialEntry.hash.slice(0, 8),
@@ -48,8 +52,21 @@ export default function Reader({ initialEntry, onBack }: Props) {
       audioDurationSec: initialEntry.audioDurationSec,
       annCount: Object.keys(initialEntry.annotations || {}).length,
     });
+    return () => log('reader unmount');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 任何 entry 改动都打一条，覆盖所有 setEntry 调用点（音频时长写入、
+  // timeupdate 进度更新、查词、清词等）。
+  useEffect(() => {
+    log('entry changed', {
+      last: Number(entry.lastPositionSec.toFixed(2)),
+      furthest: Number(entry.furthestPositionSec.toFixed(2)),
+      dur: entry.audioDurationSec,
+      ann: Object.keys(entry.annotations).length,
+      finished: entry.finished,
+    });
+  }, [entry]);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<DocSegment[]>(() =>
     splitParagraphs(initialEntry.text).map((t, i) => ({
@@ -76,9 +93,15 @@ export default function Reader({ initialEntry, onBack }: Props) {
     [audioFile],
   );
   useEffect(() => {
+    log('audioFile changed', audioFile ? {
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type,
+    } : null);
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
   // 拿到音频时长就立刻按字数均匀分布做对齐。
@@ -90,6 +113,7 @@ export default function Reader({ initialEntry, onBack }: Props) {
       );
       setSegments(out);
       setAligned(true);
+      log('aligned', { duration, segments: out.length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration]);
@@ -422,7 +446,7 @@ export default function Reader({ initialEntry, onBack }: Props) {
 
       <audio
         ref={audioRef}
-        src={audioUrl}
+        {...(audioUrl ? { src: audioUrl } : {})}
         playsInline
         preload="metadata"
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
