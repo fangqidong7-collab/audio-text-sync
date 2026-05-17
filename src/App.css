@@ -54,6 +54,9 @@ html, body, #root {
   font-size: 13px;
   margin-top: 4px;
 }
+.topbar .hint .op {
+  color: var(--accent);
+}
 
 .controls {
   background: var(--panel);
@@ -202,11 +205,12 @@ button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .segment {
   display: flex;
   gap: 12px;
-  margin: 0 -12px;
-  padding: 6px 12px;
+  margin: 0 -12px 8px;
+  padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  user-select: none;
 }
 .segment:hover { background: rgba(76, 194, 255, 0.06); }
 .segment.active {

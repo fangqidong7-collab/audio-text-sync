@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { splitSentences } from './lib/textNormalize';
+import { splitParagraphs } from './lib/textNormalize';
 import {
   alignByLengthDistribution,
   alignDocumentToAudio,
@@ -59,12 +59,12 @@ export default function App() {
       const text = isPdf
         ? await extractPdfText(f, setPdfProgress)
         : await f.text();
-      const sents = splitSentences(text).map((t, i) => ({
+      const paras = splitParagraphs(text).map((t, i) => ({
         id: i,
         text: t,
         matched: false as const,
       }));
-      setSegments(sents);
+      setSegments(paras);
     } catch (e) {
       setError(`文档解析失败：${e instanceof Error ? e.message : String(e)}`);
       setSegments([]);
@@ -168,12 +168,61 @@ export default function App() {
     a.play().catch(() => undefined);
   }
 
+  // 双击重锚：把当前音频时间作为该段的开始，后续段落按字符数重新均匀分布到剩余时长。
+  // 不动音频本身，只是修正段落 → 时间的映射。
+  function reAnchor(seg: DocSegment) {
+    const a = audioRef.current;
+    if (!a || !Number.isFinite(a.duration)) return;
+    const T = a.currentTime;
+    const dur = a.duration;
+    setSegments((prev) => {
+      const idx = prev.findIndex((s) => s.id === seg.id);
+      if (idx < 0) return prev;
+      const tail = prev.slice(idx);
+      const totalChars = tail.reduce(
+        (acc, s) => acc + Math.max(s.text.length, 1),
+        0,
+      );
+      const remaining = Math.max(dur - T, 0.01);
+      let t = T;
+      return prev.map((s, i) => {
+        if (i < idx) return s;
+        const len = Math.max(s.text.length, 1);
+        const d = (len / totalChars) * remaining;
+        const out = {
+          ...s,
+          start: t,
+          end: t + d,
+          matched: true as const,
+        };
+        t += d;
+        return out;
+      });
+    });
+  }
+
+  // 单击 vs 双击：用一个 250ms 计时器区分（onDblClick 默认会先触发两次 onClick，体验差）。
+  const clickTimerRef = useRef<number | null>(null);
+  function handleSegmentClick(seg: DocSegment) {
+    if (clickTimerRef.current !== null) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      reAnchor(seg);
+      return;
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null;
+      jumpTo(seg);
+    }, 250);
+  }
+
   return (
     <div className="app">
       <header className="topbar">
         <h1>音画同步阅读器</h1>
         <div className="hint">
-          上传文档 + 音频，自动对齐，边听边读
+          上传文档 + 音频，自动对齐，边听边读 ·
+          <span className="op"> 单击段落跳转音频 · 双击段落对齐当前播放点</span>
         </div>
       </header>
 
@@ -304,7 +353,7 @@ export default function App() {
       <section className="reader" ref={readerRef}>
         {segments.length === 0 ? (
           <div className="empty">
-            还没有内容。请上传一个 <code>.txt</code> 或 <code>.md</code> 文档。
+            还没有内容。请上传一个 <code>.pdf</code>、<code>.txt</code> 或 <code>.md</code> 文档。
           </div>
         ) : (
           segments.map((s) => (
@@ -316,12 +365,10 @@ export default function App() {
                 s.id === activeId ? 'active' : '',
                 s.matched ? 'matched' : 'unmatched',
               ].join(' ')}
-              onClick={() => jumpTo(s)}
+              onClick={() => handleSegmentClick(s)}
               title={
                 s.matched
-                  ? `${formatTime(s.start)} - ${formatTime(s.end)} · 置信度 ${(
-                      (s.confidence ?? 0) * 100
-                    ).toFixed(0)}%`
+                  ? `${formatTime(s.start)} - ${formatTime(s.end)}\n单击：跳转音频到此段\n双击：把当前播放点对齐到此段`
                   : '未在音频中匹配到（或还未对齐）'
               }
             >
