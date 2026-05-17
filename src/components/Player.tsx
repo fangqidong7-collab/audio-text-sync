@@ -19,7 +19,7 @@ function fmt(t: number): string {
 
 export default function Player({ audioRef, currentTime, duration, disabled }: Props) {
   const [playing, setPlaying] = useState(false);
-  const [speedIdx, setSpeedIdx] = useState(1); // 默认 1x
+  const [speedIdx, setSpeedIdx] = useState(1);
   const [scrubbing, setScrubbing] = useState(false);
   const [scrubT, setScrubT] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -56,7 +56,7 @@ export default function Player({ audioRef, currentTime, duration, disabled }: Pr
     a.currentTime = Math.max(0, Math.min(a.duration || 0, a.currentTime + delta));
   }
 
-  function seekFromPointer(clientX: number) {
+  function seekFromPointer(clientX: number): number | undefined {
     const track = trackRef.current;
     const a = audioRef.current;
     if (!track || !a || !Number.isFinite(a.duration) || a.duration <= 0) return;
@@ -90,11 +90,10 @@ export default function Player({ audioRef, currentTime, duration, disabled }: Pr
   const shownT = scrubbing ? scrubT : currentTime;
   const ratio =
     duration > 0 ? Math.max(0, Math.min(1, shownT / duration)) * 100 : 0;
-
   const speedLabel = SPEEDS[speedIdx] === 1 ? '1×' : `${SPEEDS[speedIdx]}×`;
 
   return (
-    <div className={`player ${disabled ? 'disabled' : ''}`}>
+    <div className={`player compact ${disabled ? 'disabled' : ''}`}>
       <div
         className="scrubber"
         ref={trackRef}
@@ -113,51 +112,44 @@ export default function Player({ audioRef, currentTime, duration, disabled }: Pr
           <div className="scrubber-thumb" style={{ left: `${ratio}%` }} />
         </div>
       </div>
-      <div className="times">
-        <span>{fmt(shownT)}</span>
-        <span>{fmt(duration)}</span>
-      </div>
-      <div className="row-spread">
-        <div className="left" />
-        <div className="controls">
-          <button
-            type="button"
-            className="iconbtn"
-            onClick={() => skip(-5)}
-            disabled={disabled}
-            aria-label="后退 5 秒"
-          >
-            −5s
-          </button>
-          <button
-            type="button"
-            className="iconbtn play"
-            onClick={toggle}
-            disabled={disabled}
-            aria-label={playing ? '暂停' : '播放'}
-          >
-            {playing ? '❚❚' : '▶'}
-          </button>
-          <button
-            type="button"
-            className="iconbtn"
-            onClick={() => skip(5)}
-            disabled={disabled}
-            aria-label="前进 5 秒"
-          >
-            +5s
-          </button>
-        </div>
-        <div className="right">
-          <button
-            type="button"
-            className="speed"
-            onClick={() => setSpeedIdx((i) => (i + 1) % SPEEDS.length)}
-            aria-label={`变速：${speedLabel}`}
-          >
-            {speedLabel}
-          </button>
-        </div>
+      <div className="player-row">
+        <span className="time time-l">{fmt(shownT)}</span>
+        <button
+          type="button"
+          className="iconbtn"
+          onClick={() => skip(-5)}
+          disabled={disabled}
+          aria-label="后退 5 秒"
+        >
+          −5
+        </button>
+        <button
+          type="button"
+          className="iconbtn play"
+          onClick={toggle}
+          disabled={disabled}
+          aria-label={playing ? '暂停' : '播放'}
+        >
+          {playing ? '❚❚' : '▶'}
+        </button>
+        <button
+          type="button"
+          className="iconbtn"
+          onClick={() => skip(5)}
+          disabled={disabled}
+          aria-label="前进 5 秒"
+        >
+          +5
+        </button>
+        <button
+          type="button"
+          className="speed"
+          onClick={() => setSpeedIdx((i) => (i + 1) % SPEEDS.length)}
+          aria-label={`变速：${speedLabel}`}
+        >
+          {speedLabel}
+        </button>
+        <span className="time time-r">{fmt(duration)}</span>
       </div>
     </div>
   );
