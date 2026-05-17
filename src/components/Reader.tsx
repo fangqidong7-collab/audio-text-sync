@@ -145,20 +145,37 @@ export default function Reader({ initialEntry, onBack }: Props) {
     });
   }, [currentTime]);
 
-  // 防抖写 IndexedDB
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      putEntry(entry).catch((e) => console.error('保存进度失败：', e));
-    }, 600);
-    return () => window.clearTimeout(t);
-  }, [entry]);
+  // 持久化策略：用 ref 镜像最新 entry；每 2 秒节流落盘，
+  // 卸载和页面隐藏时同步再写一次。
+  // （之前的"防抖 600ms"在持续播放时永远被新 timeupdate 清掉，导致根本写不到 IDB。）
+  const entryRef = useRef(entry);
+  entryRef.current = entry;
 
-  // 退出时立即写一次最终状态。
   useEffect(() => {
-    return () => {
-      void putEntry(entry).catch(() => undefined);
+    let lastSaved: LibraryEntry = entryRef.current;
+    const tryFlush = () => {
+      const cur = entryRef.current;
+      if (cur === lastSaved) return;
+      lastSaved = cur;
+      void putEntry(cur).catch((e) =>
+        console.error('保存进度失败：', e),
+      );
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const intervalId = window.setInterval(tryFlush, 2000);
+
+    const onHide = () => {
+      if (document.hidden) tryFlush();
+    };
+    const onPageHide = () => tryFlush();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onPageHide);
+      tryFlush();
+    };
   }, []);
 
   // 当前活动段
@@ -231,13 +248,12 @@ export default function Reader({ initialEntry, onBack }: Props) {
   }
 
   // 段落点击：
-  // - 锚定模式 → 该段重锚到当前播放点，自动退出锚定模式
+  // - 锚定模式 → 该段重锚到当前播放点（保持在锚定模式，由用户手动退出）
   // - 默认：单击跳转音频，双击重锚（250ms 内）
   const clickTimerRef = useRef<number | null>(null);
   function handleSegmentClick(seg: DocSegment) {
     if (anchorMode) {
       reAnchor(seg);
-      setAnchorMode(false);
       return;
     }
     if (!aligned) return;
