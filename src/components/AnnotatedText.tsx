@@ -6,6 +6,8 @@ interface Props {
   text: string;
   annotations: Record<string, AnnotationState>;
   onWordClick: (word: string) => void;
+  // 禁用：单词不响应点击（点击事件冒泡到段落，用于锚定模式）。
+  disabled?: boolean;
 }
 
 // 匹配英文词（含撇号缩略：don't、it's）。中文/数字/标点都不在这里命中。
@@ -15,6 +17,7 @@ export default function AnnotatedText({
   text,
   annotations,
   onWordClick,
+  disabled = false,
 }: Props) {
   const parts: Array<{ kind: 'word' | 'gap'; text: string; idx: number }> = [];
   let last = 0;
@@ -47,10 +50,14 @@ export default function AnnotatedText({
           <span
             key={p.idx}
             className={cls}
-            onClick={(e) => {
-              e.stopPropagation();
-              onWordClick(p.text);
-            }}
+            onClick={
+              disabled
+                ? undefined
+                : (e) => {
+                    e.stopPropagation();
+                    onWordClick(p.text);
+                  }
+            }
           >
             {p.text}
             {ann === 'loading' && <span className="def-loading">…</span>}

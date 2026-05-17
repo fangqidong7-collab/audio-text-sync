@@ -4,12 +4,16 @@ import {
   type DocSegment,
 } from '../lib/aligner';
 import { lookupWord, type DictResult } from '../lib/dict';
-import {
-  putEntry,
-  type LibraryEntry,
-} from '../lib/library';
+import { putEntry, type LibraryEntry } from '../lib/library';
 import { splitParagraphs } from '../lib/textNormalize';
 import AnnotatedText, { type AnnotationState } from './AnnotatedText';
+import {
+  IconBack,
+  IconClose,
+  IconHeadphones,
+  IconPin,
+  IconRefresh,
+} from './Icons';
 import Player from './Player';
 
 interface Props {
@@ -40,8 +44,12 @@ export default function Reader({ initialEntry, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [anchorMode, setAnchorMode] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const readerRef = useRef<HTMLDivElement>(null);
+
+  // 用 ref 而非 state 来记录待恢复位置，避免读到被回写覆盖后的 0。
+  const resumeTargetRef = useRef<number>(initialEntry.lastPositionSec);
   const resumedRef = useRef(false);
 
   const audioUrl = useMemo(
@@ -54,7 +62,7 @@ export default function Reader({ initialEntry, onBack }: Props) {
     };
   }, [audioUrl]);
 
-  // 拿到音频时长 → 立刻按字数均匀分布做对齐。
+  // 拿到音频时长就立刻按字数均匀分布做对齐。
   useEffect(() => {
     if (duration > 0 && segments.length > 0) {
       const out = alignByLengthDistribution(
@@ -67,31 +75,34 @@ export default function Reader({ initialEntry, onBack }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration]);
 
-  // 音频元数据加载后：恢复上次播放位置 + 写入音频时长到 entry
+  // 尝试恢复到上次播放位置；onLoadedMetadata 与 onCanPlay 都会调用一次。
+  function tryResume(a: HTMLAudioElement) {
+    if (resumedRef.current) return;
+    if (!Number.isFinite(a.duration) || a.duration <= 0) return;
+    const target = resumeTargetRef.current;
+    if (target > 1 && target < a.duration - 5) {
+      a.currentTime = target;
+      // 立刻同步 React state，避免 UI 显示 00:00
+      setCurrentTime(target);
+    }
+    resumedRef.current = true;
+  }
+
   function handleLoadedMetadata(e: React.SyntheticEvent<HTMLAudioElement>) {
     const a = e.currentTarget;
     setDuration(a.duration);
     setEntry((prev) => ({ ...prev, audioDurationSec: a.duration }));
-    if (
-      !resumedRef.current &&
-      entry.lastPositionSec > 1 &&
-      entry.lastPositionSec < a.duration - 5
-    ) {
-      a.currentTime = entry.lastPositionSec;
-      resumedRef.current = true;
-    }
+    tryResume(a);
   }
 
-  // 累计听了多久（仅在 playing 时计时）+ 进度回写。
+  // 累计实际播放秒数：仅在 playing 且 currentTime 自然推进时计入。
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
     let last = a.currentTime;
     let acc = 0;
-    let timer: number | null = null;
     const tick = () => {
       const now = a.currentTime;
-      // 用户拖动跳转不计入累计
       const diff = now - last;
       last = now;
       if (!a.paused && diff > 0 && diff < 1.5) acc += diff;
@@ -104,14 +115,13 @@ export default function Reader({ initialEntry, onBack }: Props) {
         }));
       }
     };
-    timer = window.setInterval(tick, 1000);
-    return () => {
-      if (timer !== null) window.clearInterval(timer);
-    };
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  // 进度同步到 entry（每秒最多写一次内存状态，IDB 写入再防抖）
+  // 进度回写到 entry。注意：恢复完成前不能允许 timeupdate 把 lastPositionSec 写成 0。
   useEffect(() => {
+    if (!resumedRef.current) return;
     if (currentTime <= 0) return;
     setEntry((prev) => {
       const furthest = Math.max(prev.furthestPositionSec, currentTime);
@@ -143,7 +153,7 @@ export default function Reader({ initialEntry, onBack }: Props) {
     return () => window.clearTimeout(t);
   }, [entry]);
 
-  // 退出时立即写一次最新状态。
+  // 退出时立即写一次最终状态。
   useEffect(() => {
     return () => {
       void putEntry(entry).catch(() => undefined);
@@ -167,7 +177,6 @@ export default function Reader({ initialEntry, onBack }: Props) {
     return null;
   }, [segments, currentTime]);
 
-  // 阅读区内部滚动
   useEffect(() => {
     if (activeId === null) return;
     const reader = readerRef.current;
@@ -221,9 +230,16 @@ export default function Reader({ initialEntry, onBack }: Props) {
     });
   }
 
-  // 单击 vs 双击：250ms 计时器区分。
+  // 段落点击：
+  // - 锚定模式 → 该段重锚到当前播放点，自动退出锚定模式
+  // - 默认：单击跳转音频，双击重锚（250ms 内）
   const clickTimerRef = useRef<number | null>(null);
   function handleSegmentClick(seg: DocSegment) {
+    if (anchorMode) {
+      reAnchor(seg);
+      setAnchorMode(false);
+      return;
+    }
     if (!aligned) return;
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current);
@@ -237,7 +253,6 @@ export default function Reader({ initialEntry, onBack }: Props) {
     }, 250);
   }
 
-  // 点词查英英
   async function handleWordClick(word: string) {
     const lc = word.toLowerCase();
     if (loadingWords.has(lc)) return;
@@ -273,7 +288,6 @@ export default function Reader({ initialEntry, onBack }: Props) {
     setEntry((prev) => ({ ...prev, annotations: {} }));
   }
 
-  // 合并 entry.annotations + loadingWords 给渲染层
   const renderedAnnotations = useMemo<Record<string, AnnotationState>>(() => {
     const out: Record<string, AnnotationState> = { ...entry.annotations };
     for (const w of loadingWords) out[w] = 'loading';
@@ -282,17 +296,36 @@ export default function Reader({ initialEntry, onBack }: Props) {
 
   const annCount = Object.keys(entry.annotations).length;
   const noAudio = !audioFile;
+  const canAnchor = !noAudio && aligned;
 
   return (
-    <div className="app reader-view">
+    <div className={`app reader-view ${anchorMode ? 'anchor-mode' : ''}`}>
       <header className="app-header reader-header">
-        <button className="iconbtn back" onClick={onBack} aria-label="返回">
-          ‹
+        <button
+          className="iconbtn back"
+          onClick={onBack}
+          aria-label="返回书架"
+        >
+          <IconBack size={22} />
         </button>
         <div className="reader-title" title={entry.name}>
           {entry.name}
         </div>
-        <label className="iconbtn audio-pick" aria-label="选择 / 更换音频">
+        <button
+          type="button"
+          className={`iconbtn anchor-btn ${anchorMode ? 'active' : ''}`}
+          onClick={() => setAnchorMode((m) => !m)}
+          disabled={!canAnchor}
+          aria-label={anchorMode ? '取消对齐' : '对齐当前播放段'}
+          title={anchorMode ? '取消对齐' : '对齐当前播放段'}
+        >
+          <IconPin size={18} />
+        </button>
+        <label
+          className={`iconbtn audio-pick ${noAudio ? 'highlight' : ''}`}
+          aria-label="选择 / 更换音频"
+          title={noAudio ? '选择音频' : '更换音频'}
+        >
           <input
             type="file"
             accept="audio/*"
@@ -300,16 +333,17 @@ export default function Reader({ initialEntry, onBack }: Props) {
               e.target.files && setAudioFile(e.target.files[0])
             }
           />
-          <span aria-hidden>{noAudio ? '🎧' : '🔄'}</span>
+          {noAudio ? <IconHeadphones size={18} /> : <IconRefresh size={18} />}
         </label>
         {annCount > 0 && (
           <button
-            className="iconbtn ann-clear"
+            className="vocab-pill"
             onClick={clearAnnotations}
             aria-label={`清空 ${annCount} 条释义`}
             title={`清空 ${annCount} 条释义`}
           >
-            ✕<small>{annCount}</small>
+            <span className="vocab-count">{annCount}</span>
+            <IconClose size={12} />
           </button>
         )}
       </header>
@@ -321,27 +355,22 @@ export default function Reader({ initialEntry, onBack }: Props) {
         preload="metadata"
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={handleLoadedMetadata}
+        onCanPlay={(e) => tryResume(e.currentTarget)}
         style={{ display: 'none' }}
       />
 
       {error && <div className="error">{error}</div>}
 
-      {noAudio && (
-        <div className="audio-prompt">
-          <label className="upload-card">
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={(e) =>
-                e.target.files && setAudioFile(e.target.files[0])
-              }
-            />
-            <span className="icon" aria-hidden>🎧</span>
-            <span className="text">
-              <span className="t">选择配套音频</span>
-              <span className="s">MP3 / WAV / M4A …</span>
-            </span>
-          </label>
+      {anchorMode && (
+        <div className="anchor-banner" role="status">
+          <span>👆 点一下你现在听到的那一段</span>
+          <button
+            type="button"
+            className="anchor-cancel"
+            onClick={() => setAnchorMode(false)}
+          >
+            取消
+          </button>
         </div>
       )}
 
@@ -357,9 +386,11 @@ export default function Reader({ initialEntry, onBack }: Props) {
             ].join(' ')}
             onClick={() => handleSegmentClick(s)}
             title={
-              s.matched
-                ? `${fmtTime(s.start)} – ${fmtTime(s.end)}\n单击：跳转音频\n双击：对齐当前播放点`
-                : '请先选择音频以开始对齐'
+              anchorMode
+                ? '点此把当前播放点对齐到这一段'
+                : s.matched
+                  ? `${fmtTime(s.start)} – ${fmtTime(s.end)}\n单击：跳转音频\n双击：对齐当前播放点`
+                  : '请先选择音频以开始对齐'
             }
           >
             {s.matched && (
@@ -369,6 +400,7 @@ export default function Reader({ initialEntry, onBack }: Props) {
               text={s.text}
               annotations={renderedAnnotations}
               onWordClick={handleWordClick}
+              disabled={anchorMode}
             />
           </p>
         ))}

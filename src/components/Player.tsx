@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { IconPause, IconPlay, IconSkipBack, IconSkipForward } from './Icons';
 
 interface Props {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -116,12 +117,13 @@ export default function Player({ audioRef, currentTime, duration, disabled }: Pr
         <span className="time time-l">{fmt(shownT)}</span>
         <button
           type="button"
-          className="iconbtn"
+          className="iconbtn skip"
           onClick={() => skip(-5)}
           disabled={disabled}
           aria-label="后退 5 秒"
         >
-          −5
+          <IconSkipBack size={18} />
+          <small className="skip-num">5</small>
         </button>
         <button
           type="button"
@@ -130,16 +132,17 @@ export default function Player({ audioRef, currentTime, duration, disabled }: Pr
           disabled={disabled}
           aria-label={playing ? '暂停' : '播放'}
         >
-          {playing ? '❚❚' : '▶'}
+          {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
         </button>
         <button
           type="button"
-          className="iconbtn"
+          className="iconbtn skip"
           onClick={() => skip(5)}
           disabled={disabled}
           aria-label="前进 5 秒"
         >
-          +5
+          <IconSkipForward size={18} />
+          <small className="skip-num">5</small>
         </button>
         <button
           type="button"

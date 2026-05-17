@@ -11,6 +11,7 @@ import {
   type LibraryEntry,
 } from '../lib/library';
 import { extractPdfText, type PdfParseProgress } from '../lib/pdfParse';
+import { IconCheck, IconDoc, IconPlus, IconTrash } from './Icons';
 
 interface Props {
   onOpen: (entry: LibraryEntry) => void;
@@ -110,7 +111,9 @@ export default function Home({ onOpen }: Props) {
             }
             disabled={parsing}
           />
-          <span className="icon" aria-hidden>＋</span>
+          <span className="icon" aria-hidden>
+            <IconPlus size={22} />
+          </span>
           <span className="text">
             <span className="t">添加文档</span>
             <span className="s">PDF / TXT / Markdown</span>
@@ -156,12 +159,17 @@ export default function Home({ onOpen }: Props) {
                 onClick={() => onOpen(entry)}
               >
                 <div className="entry-head">
-                  <span className="entry-icon" aria-hidden>📄</span>
+                  <span className="entry-icon" aria-hidden>
+                    <IconDoc size={18} />
+                  </span>
                   <div className="entry-name" title={entry.name}>
                     {entry.name}
                   </div>
                   {entry.finished && (
-                    <span className="entry-badge">读完</span>
+                    <span className="entry-badge">
+                      <IconCheck size={12} />
+                      读完
+                    </span>
                   )}
                   <button
                     type="button"
@@ -172,7 +180,7 @@ export default function Home({ onOpen }: Props) {
                       handleDelete(entry.hash, entry.name);
                     }}
                   >
-                    ×
+                    <IconTrash size={16} />
                   </button>
                 </div>
 
