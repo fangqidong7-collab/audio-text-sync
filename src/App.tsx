@@ -8,6 +8,7 @@ import {
   type TimedChunk,
 } from './lib/aligner';
 import { transcribe, type TranscribeProgress } from './lib/asr';
+import { extractPdfText, type PdfParseProgress } from './lib/pdfParse';
 
 type Mode = 'manual' | 'auto';
 
@@ -26,10 +27,13 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('manual');
   const [language, setLanguage] = useState<'auto' | 'chinese' | 'english'>('auto');
   const [progress, setProgress] = useState<TranscribeProgress | null>(null);
+  const [pdfProgress, setPdfProgress] = useState<PdfParseProgress | null>(null);
   const [aligning, setAligning] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const readerRef = useRef<HTMLDivElement>(null);
   const audioUrl = useMemo(
     () => (audioFile ? URL.createObjectURL(audioFile) : ''),
     [audioFile],
@@ -47,13 +51,27 @@ export default function App() {
   async function handleDocFile(f: File) {
     setDocFile(f);
     setError(null);
-    const text = await f.text();
-    const sents = splitSentences(text).map((t, i) => ({
-      id: i,
-      text: t,
-      matched: false as const,
-    }));
-    setSegments(sents);
+    setParsing(true);
+    setPdfProgress(null);
+    try {
+      const isPdf =
+        f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+      const text = isPdf
+        ? await extractPdfText(f, setPdfProgress)
+        : await f.text();
+      const sents = splitSentences(text).map((t, i) => ({
+        id: i,
+        text: t,
+        matched: false as const,
+      }));
+      setSegments(sents);
+    } catch (e) {
+      setError(`文档解析失败：${e instanceof Error ? e.message : String(e)}`);
+      setSegments([]);
+    } finally {
+      setParsing(false);
+      setPdfProgress(null);
+    }
   }
 
   function handleAudioFile(f: File) {
@@ -126,11 +144,15 @@ export default function App() {
     return id;
   }, [segments, currentTime]);
 
-  // 自动滚动到当前段落
+  // 自动滚动到当前段落（只在阅读区内部滚动，不会带飞整个页面）
   useEffect(() => {
     if (activeId === null) return;
+    const reader = readerRef.current;
     const el = document.getElementById(`seg-${activeId}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!reader || !el) return;
+    const target =
+      el.offsetTop - reader.clientHeight / 2 + el.clientHeight / 2;
+    reader.scrollTo({ top: target, behavior: 'smooth' });
   }, [activeId]);
 
   function jumpTo(seg: DocSegment) {
@@ -154,10 +176,10 @@ export default function App() {
           <label className="filebtn">
             <input
               type="file"
-              accept=".txt,.md,text/plain,text/markdown"
+              accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
               onChange={(e) => e.target.files && handleDocFile(e.target.files[0])}
             />
-            <span>1. 选择文档（.txt / .md）</span>
+            <span>1. 选择文档（.pdf / .txt / .md）</span>
             {docFile && <em>{docFile.name}</em>}
           </label>
 
@@ -213,12 +235,35 @@ export default function App() {
 
           <button
             className="primary"
-            disabled={!docFile || !audioFile || aligning}
+            disabled={!docFile || !audioFile || aligning || parsing}
             onClick={runAlign}
           >
             {aligning ? '对齐中…' : '开始对齐'}
           </button>
         </div>
+
+        {parsing && (
+          <div className="progress">
+            <div className="progress-msg">
+              {pdfProgress
+                ? `解析 PDF 第 ${pdfProgress.page} / ${pdfProgress.totalPages} 页`
+                : '解析文档…'}
+            </div>
+            {pdfProgress && (
+              <div className="progress-bar">
+                <div
+                  className="progress-fill"
+                  style={{
+                    width: `${(
+                      (pdfProgress.page / pdfProgress.totalPages) *
+                      100
+                    ).toFixed(1)}%`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {progress && (
           <div className="progress">
@@ -250,7 +295,7 @@ export default function App() {
         </div>
       </section>
 
-      <section className="reader">
+      <section className="reader" ref={readerRef}>
         {segments.length === 0 ? (
           <div className="empty">
             还没有内容。请上传一个 <code>.txt</code> 或 <code>.md</code> 文档。
