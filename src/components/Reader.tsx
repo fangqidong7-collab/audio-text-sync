@@ -316,6 +316,10 @@ export default function Reader({ initialEntry, onBack }: Props) {
     a.play().catch(() => undefined);
   }
 
+  // 把"被点中的那一段"对齐到当前播放点 T：
+  // - 前面所有段在 [0, T] 区间按字数重新均分
+  // - 当前段及之后按字数均分 [T, duration]
+  // 这样不会出现"前一段 end > T"导致 activeId 命中错位的问题。
   function reAnchor(seg: DocSegment) {
     const a = audioRef.current;
     if (!a || !Number.isFinite(a.duration)) return;
@@ -324,26 +328,53 @@ export default function Reader({ initialEntry, onBack }: Props) {
     setSegments((prev) => {
       const idx = prev.findIndex((s) => s.id === seg.id);
       if (idx < 0) return prev;
+
+      const head = prev.slice(0, idx);
       const tail = prev.slice(idx);
-      const totalChars = tail.reduce(
+
+      const headChars = head.reduce(
         (acc, s) => acc + Math.max(s.text.length, 1),
         0,
       );
-      const remaining = Math.max(dur - T, 0.01);
-      let t = T;
-      return prev.map((s, i) => {
-        if (i < idx) return s;
+      const tailChars = tail.reduce(
+        (acc, s) => acc + Math.max(s.text.length, 1),
+        0,
+      );
+
+      const headSpan = Math.max(T, 0);
+      const tailSpan = Math.max(dur - T, 0.01);
+
+      // 前段：均分 [0, T]
+      let th = 0;
+      const headOut = head.map((s) => {
         const len = Math.max(s.text.length, 1);
-        const d = (len / totalChars) * remaining;
+        const d = headChars > 0 ? (len / headChars) * headSpan : 0;
         const out = {
           ...s,
-          start: t,
-          end: t + d,
+          start: th,
+          end: th + d,
           matched: true as const,
         };
-        t += d;
+        th += d;
         return out;
       });
+
+      // 当前段及之后：均分 [T, dur]
+      let tt = T;
+      const tailOut = tail.map((s) => {
+        const len = Math.max(s.text.length, 1);
+        const d = tailChars > 0 ? (len / tailChars) * tailSpan : 0;
+        const out = {
+          ...s,
+          start: tt,
+          end: tt + d,
+          matched: true as const,
+        };
+        tt += d;
+        return out;
+      });
+
+      return [...headOut, ...tailOut];
     });
   }
 
