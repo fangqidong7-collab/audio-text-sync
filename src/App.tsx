@@ -6,8 +6,9 @@ import {
   type DocSegment,
 } from './lib/aligner';
 import { extractPdfText, type PdfParseProgress } from './lib/pdfParse';
+import Player from './components/Player';
 
-function formatTime(t: number | undefined): string {
+function fmtTime(t: number | undefined): string {
   if (t === undefined || !Number.isFinite(t)) return '--:--';
   const s = Math.max(0, Math.floor(t));
   const mm = String(Math.floor(s / 60)).padStart(2, '0');
@@ -23,6 +24,7 @@ export default function App() {
   const [aligning, setAligning] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aligned, setAligned] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const readerRef = useRef<HTMLDivElement>(null);
@@ -39,10 +41,10 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // 读取文档文本
   async function handleDocFile(f: File) {
     setDocFile(f);
     setError(null);
+    setAligned(false);
     setParsing(true);
     setPdfProgress(null);
     try {
@@ -69,6 +71,7 @@ export default function App() {
   function handleAudioFile(f: File) {
     setAudioFile(f);
     setError(null);
+    setAligned(false);
   }
 
   async function runAlign() {
@@ -80,11 +83,11 @@ export default function App() {
     setError(null);
     try {
       const dur = duration || (await waitForDuration());
-      const aligned = alignByLengthDistribution(segments, dur);
-      setSegments(aligned);
+      const out = alignByLengthDistribution(segments, dur);
+      setSegments(out);
+      setAligned(true);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setAligning(false);
     }
@@ -103,9 +106,8 @@ export default function App() {
     });
   }
 
-  // 当前正在朗读的段落
+  // 当前段落
   const activeId = useMemo(() => {
-    let id: number | null = null;
     for (const s of segments) {
       if (
         s.matched &&
@@ -114,15 +116,13 @@ export default function App() {
         currentTime >= s.start &&
         currentTime <= s.end
       ) {
-        id = s.id;
-        break;
+        return s.id;
       }
     }
-    return id;
+    return null;
   }, [segments, currentTime]);
 
-  // 自动滚动到当前段落（只在阅读区内部滚动，不会带飞整个页面）
-  // 用 getBoundingClientRect 计算相对偏移，避开 offsetTop 受 offsetParent 影响的坑。
+  // 阅读区内部滚动到活动段落（不带飞页面）
   useEffect(() => {
     if (activeId === null) return;
     const reader = readerRef.current;
@@ -145,8 +145,6 @@ export default function App() {
     a.play().catch(() => undefined);
   }
 
-  // 双击重锚：把当前音频时间作为该段的开始，后续段落按字符数重新均匀分布到剩余时长。
-  // 不动音频本身，只是修正段落 → 时间的映射。
   function reAnchor(seg: DocSegment) {
     const a = audioRef.current;
     if (!a || !Number.isFinite(a.duration)) return;
@@ -178,9 +176,14 @@ export default function App() {
     });
   }
 
-  // 单击 vs 双击：用一个 250ms 计时器区分（onDblClick 默认会先触发两次 onClick，体验差）。
+  // 单击 vs 双击：250ms 计时器区分。
   const clickTimerRef = useRef<number | null>(null);
   function handleSegmentClick(seg: DocSegment) {
+    if (!aligned) {
+      // 还没对齐，单击就是跳转：但因为没时间戳所以无效。给个轻提示。
+      setError('请先点"开始对齐"');
+      return;
+    }
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
@@ -193,122 +196,214 @@ export default function App() {
     }, 250);
   }
 
+  const ready = !!docFile && !!audioFile;
+  const hasReader = segments.length > 0;
+
   return (
     <div className="app">
-      <header className="topbar">
+      <header className="app-header">
         <h1>音画同步阅读器</h1>
-        <div className="hint">
-          上传文档 + 音频，自动对齐，边听边读 ·
-          <span className="op"> 单击段落跳转音频 · 双击段落对齐当前播放点</span>
-        </div>
+        <span className="meta">
+          {hasReader && aligned
+            ? `${segments.length} 段 · 单击跳转 · 双击对齐`
+            : hasReader
+              ? '点击"开始对齐"进入阅读'
+              : '上传文档和音频即可开始'}
+        </span>
       </header>
 
-      <section className="controls">
-        <div className="control-row">
-          <label className="filebtn">
-            <input
-              type="file"
-              accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
-              onChange={(e) => e.target.files && handleDocFile(e.target.files[0])}
-            />
-            <span>1. 选择文档（.pdf / .txt / .md）</span>
-            {docFile && <em>{docFile.name}</em>}
-          </label>
+      {/* 隐藏的真实 audio 元素，控件由 Player 组件接管 */}
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        playsInline
+        preload="metadata"
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        style={{ display: 'none' }}
+      />
 
-          <label className="filebtn">
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={(e) => e.target.files && handleAudioFile(e.target.files[0])}
-            />
-            <span>2. 选择音频</span>
-            {audioFile && <em>{audioFile.name}</em>}
-          </label>
-        </div>
-
-        <div className="control-row">
-          <button
-            className="primary"
-            disabled={!docFile || !audioFile || aligning || parsing}
-            onClick={runAlign}
-          >
-            {aligning ? '对齐中…' : '开始对齐'}
-          </button>
-        </div>
-
-        {parsing && (
-          <div className="progress">
-            <div className="progress-msg">
-              {pdfProgress
-                ? `解析 PDF 第 ${pdfProgress.page} / ${pdfProgress.totalPages} 页`
-                : '解析文档…'}
+      <main className="app-main">
+        {!hasReader ? (
+          <div className="empty-state">
+            <div className="title">📖 边听边读，随声而行</div>
+            <div className="sub">
+              上传一份 PDF / TXT / Markdown，再选一段配套音频，即可在阅读时跟随朗读自动滚动。
             </div>
-            {pdfProgress && (
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{
-                    width: `${(
-                      (pdfProgress.page / pdfProgress.totalPages) *
-                      100
-                    ).toFixed(1)}%`,
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {error && <div className="error">⚠ {error}</div>}
-      </section>
-
-      <section className="player">
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          controls
-          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-        />
-        <div className="player-meta">
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </div>
-      </section>
-
-      <section className="reader" ref={readerRef}>
-        {segments.length === 0 ? (
-          <div className="empty">
-            还没有内容。请上传一个 <code>.pdf</code>、<code>.txt</code> 或 <code>.md</code> 文档。
+            <div className="upload-cards">
+              <UploadCard
+                title="选择文档"
+                hint={docFile ? docFile.name : 'PDF / TXT / Markdown'}
+                filled={!!docFile}
+                accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+                icon="📄"
+                onPick={handleDocFile}
+              />
+              <UploadCard
+                title="选择音频"
+                hint={audioFile ? audioFile.name : 'MP3 / WAV / M4A …'}
+                filled={!!audioFile}
+                accept="audio/*"
+                icon="🎧"
+                onPick={handleAudioFile}
+              />
+            </div>
+            {parsing && <ParseProgress pdfProgress={pdfProgress} />}
+            {error && <div className="error">{error}</div>}
           </div>
         ) : (
-          segments.map((s) => (
-            <p
-              key={s.id}
-              id={`seg-${s.id}`}
-              className={[
-                'segment',
-                s.id === activeId ? 'active' : '',
-                s.matched ? 'matched' : 'unmatched',
-              ].join(' ')}
-              onClick={() => handleSegmentClick(s)}
-              title={
-                s.matched
-                  ? `${formatTime(s.start)} - ${formatTime(s.end)}\n单击：跳转音频到此段\n双击：把当前播放点对齐到此段`
-                  : '未在音频中匹配到（或还未对齐）'
-              }
-            >
-              <span className="seg-time">{formatTime(s.start)}</span>
-              <span className="seg-text">{s.text}</span>
-            </p>
-          ))
-        )}
-      </section>
+          <>
+            <div className="file-bar">
+              <div className="row">
+                <span className="label">文档</span>
+                <span className="name">{docFile?.name}</span>
+                <label className="swap">
+                  更换
+                  <input
+                    type="file"
+                    accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+                    onChange={(e) =>
+                      e.target.files && handleDocFile(e.target.files[0])
+                    }
+                  />
+                </label>
+              </div>
+              <div className="row">
+                <span className="label">音频</span>
+                <span className="name">
+                  {audioFile?.name}
+                  {duration > 0 && (
+                    <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
+                      {fmtTime(duration)}
+                    </span>
+                  )}
+                </span>
+                <label className="swap">
+                  更换
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(e) =>
+                      e.target.files && handleAudioFile(e.target.files[0])
+                    }
+                  />
+                </label>
+              </div>
 
-      <footer className="foot">
-        <span>
-          匹配状态：{segments.filter((s) => s.matched).length} / {segments.length}
-        </span>
-      </footer>
+              {!aligned && (
+                <div className="actions">
+                  <button
+                    className="primary"
+                    disabled={!ready || aligning || parsing}
+                    onClick={runAlign}
+                  >
+                    {aligning ? '对齐中…' : '开始对齐'}
+                  </button>
+                  {parsing && (
+                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                      {pdfProgress
+                        ? `解析 PDF ${pdfProgress.page}/${pdfProgress.totalPages}`
+                        : '解析文档…'}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {parsing && <ParseProgress pdfProgress={pdfProgress} />}
+            {error && <div className="error">{error}</div>}
+
+            <div className="reader" ref={readerRef}>
+              {segments.map((s) => (
+                <p
+                  key={s.id}
+                  id={`seg-${s.id}`}
+                  className={[
+                    'segment',
+                    s.id === activeId ? 'active' : '',
+                    s.matched ? 'matched' : 'unmatched',
+                  ].join(' ')}
+                  onClick={() => handleSegmentClick(s)}
+                  title={
+                    s.matched
+                      ? `${fmtTime(s.start)} – ${fmtTime(s.end)}\n单击：跳转音频\n双击：对齐当前播放点`
+                      : '尚未对齐'
+                  }
+                >
+                  {s.matched && (
+                    <span className="seg-time">{fmtTime(s.start)}</span>
+                  )}
+                  {s.text}
+                </p>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
+
+      {ready && (
+        <Player
+          audioRef={audioRef}
+          currentTime={currentTime}
+          duration={duration}
+          disabled={!aligned}
+        />
+      )}
+    </div>
+  );
+}
+
+function UploadCard({
+  title,
+  hint,
+  filled,
+  accept,
+  icon,
+  onPick,
+}: {
+  title: string;
+  hint: string;
+  filled: boolean;
+  accept: string;
+  icon: string;
+  onPick: (f: File) => void;
+}) {
+  return (
+    <label className={`upload-card ${filled ? 'filled' : ''}`}>
+      <input
+        type="file"
+        accept={accept}
+        onChange={(e) => e.target.files && onPick(e.target.files[0])}
+      />
+      <span className="icon" aria-hidden>
+        {icon}
+      </span>
+      <span className="text">
+        <span className="t">{title}</span>
+        <span className="s">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
+function ParseProgress({ pdfProgress }: { pdfProgress: PdfParseProgress | null }) {
+  return (
+    <div className="progress">
+      <div>
+        {pdfProgress
+          ? `解析 PDF 第 ${pdfProgress.page} / ${pdfProgress.totalPages} 页`
+          : '解析文档…'}
+      </div>
+      {pdfProgress && (
+        <div className="progress-bar">
+          <div
+            className="progress-fill"
+            style={{
+              width: `${((pdfProgress.page / pdfProgress.totalPages) * 100).toFixed(1)}%`,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
