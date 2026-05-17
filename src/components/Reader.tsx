@@ -56,17 +56,44 @@ export default function Reader({ initialEntry, onBack }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 任何 entry 改动都打一条，覆盖所有 setEntry 调用点（音频时长写入、
-  // timeupdate 进度更新、查词、清词等）。
+  // entry 改动的"显著事件"日志（音频时长/释义数/读完状态）。
+  // 位置类的高频变化已经由 "entry update via timeupdate" 采样打印，不再重复。
+  const prevEntrySigRef = useRef(initialEntry);
   useEffect(() => {
-    log('entry changed', {
-      last: Number(entry.lastPositionSec.toFixed(2)),
-      furthest: Number(entry.furthestPositionSec.toFixed(2)),
-      dur: entry.audioDurationSec,
-      ann: Object.keys(entry.annotations).length,
-      finished: entry.finished,
-    });
+    const prev = prevEntrySigRef.current;
+    prevEntrySigRef.current = entry;
+    const annPrev = Object.keys(prev.annotations).length;
+    const annNow = Object.keys(entry.annotations).length;
+    if (
+      prev.audioDurationSec !== entry.audioDurationSec ||
+      annPrev !== annNow ||
+      prev.finished !== entry.finished
+    ) {
+      log('entry significant change', {
+        dur: entry.audioDurationSec,
+        ann: annNow,
+        finished: entry.finished,
+      });
+    }
   }, [entry]);
+
+  // 进入文档时，即使还没选音频，也用上次保存的 audioDurationSec
+  // 把段落预先对齐，并把 currentTime 推到上次离开的位置，
+  // 这样阅读视图能立刻显示上次的位置并自动滚到那里。
+  useEffect(() => {
+    if (
+      initialEntry.audioDurationSec > 0 &&
+      initialEntry.lastPositionSec > 0
+    ) {
+      log('preload from saved progress', {
+        duration: initialEntry.audioDurationSec,
+        position: initialEntry.lastPositionSec,
+      });
+      setDuration(initialEntry.audioDurationSec);
+      setCurrentTime(initialEntry.lastPositionSec);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<DocSegment[]>(() =>
     splitParagraphs(initialEntry.text).map((t, i) => ({
@@ -337,6 +364,8 @@ export default function Reader({ initialEntry, onBack }: Props) {
       return;
     }
     if (!aligned) return;
+    // 没选音频时仅展示，不响应点击跳转/重锚（避免误触改动播放状态）
+    if (!audioFile) return;
     if (clickTimerRef.current !== null) {
       window.clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
