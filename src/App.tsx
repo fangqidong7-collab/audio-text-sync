@@ -3,14 +3,9 @@ import './App.css';
 import { splitParagraphs } from './lib/textNormalize';
 import {
   alignByLengthDistribution,
-  alignDocumentToAudio,
   type DocSegment,
-  type TimedChunk,
 } from './lib/aligner';
-import { transcribe, type TranscribeProgress } from './lib/asr';
 import { extractPdfText, type PdfParseProgress } from './lib/pdfParse';
-
-type Mode = 'manual' | 'auto';
 
 function formatTime(t: number | undefined): string {
   if (t === undefined || !Number.isFinite(t)) return '--:--';
@@ -24,9 +19,6 @@ export default function App() {
   const [docFile, setDocFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [segments, setSegments] = useState<DocSegment[]>([]);
-  const [mode, setMode] = useState<Mode>('manual');
-  const [language, setLanguage] = useState<'auto' | 'chinese' | 'english'>('auto');
-  const [progress, setProgress] = useState<TranscribeProgress | null>(null);
   const [pdfProgress, setPdfProgress] = useState<PdfParseProgress | null>(null);
   const [aligning, setAligning] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -87,29 +79,14 @@ export default function App() {
     setAligning(true);
     setError(null);
     try {
-      if (mode === 'manual') {
-        // 等 metadata 加载好以拿到时长
-        const dur = duration || (await waitForDuration());
-        const aligned = alignByLengthDistribution(segments, dur);
-        setSegments(aligned);
-      } else {
-        const chunks: TimedChunk[] = await transcribe(
-          audioFile,
-          { language },
-          setProgress,
-        );
-        const aligned = alignDocumentToAudio(segments, chunks, {
-          minConfidence: 0.5,
-          monotonic: true,
-        });
-        setSegments(aligned);
-      }
+      const dur = duration || (await waitForDuration());
+      const aligned = alignByLengthDistribution(segments, dur);
+      setSegments(aligned);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
     } finally {
       setAligning(false);
-      setProgress(null);
     }
   }
 
@@ -250,44 +227,6 @@ export default function App() {
         </div>
 
         <div className="control-row">
-          <fieldset className="mode">
-            <legend>对齐模式</legend>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                checked={mode === 'manual'}
-                onChange={() => setMode('manual')}
-              />
-              手动 (按字数均匀分布)
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                checked={mode === 'auto'}
-                onChange={() => setMode('auto')}
-              />
-              自动 (Whisper 识别 + 模糊匹配)
-            </label>
-          </fieldset>
-
-          {mode === 'auto' && (
-            <label className="lang">
-              语言：
-              <select
-                value={language}
-                onChange={(e) =>
-                  setLanguage(e.target.value as 'auto' | 'chinese' | 'english')
-                }
-              >
-                <option value="auto">自动</option>
-                <option value="chinese">中文</option>
-                <option value="english">English</option>
-              </select>
-            </label>
-          )}
-
           <button
             className="primary"
             disabled={!docFile || !audioFile || aligning || parsing}
@@ -314,20 +253,6 @@ export default function App() {
                       100
                     ).toFixed(1)}%`,
                   }}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {progress && (
-          <div className="progress">
-            <div className="progress-msg">{progress.message}</div>
-            {progress.progress !== undefined && (
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${(progress.progress * 100).toFixed(1)}%` }}
                 />
               </div>
             )}
