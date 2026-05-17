@@ -463,7 +463,10 @@ button { font-family: inherit; }
     ui-serif, Georgia, serif;
   font-size: 17px;
   line-height: 1.95;
-  color: var(--text);
+  color: #000;
+}
+@media (prefers-color-scheme: dark) {
+  .reader { color: var(--text); }
 }
 
 @media (min-width: 720px) {

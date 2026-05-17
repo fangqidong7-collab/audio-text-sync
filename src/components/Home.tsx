@@ -34,7 +34,18 @@ export default function Home({ onOpen }: Props) {
 
   async function refresh() {
     try {
-      setEntries(await listEntries());
+      const list = await listEntries();
+      console.log(
+        '[ats] home refresh',
+        list.map((e) => ({
+          name: e.name,
+          lastPositionSec: Number(e.lastPositionSec.toFixed(2)),
+          furthestPositionSec: Number(e.furthestPositionSec.toFixed(2)),
+          audioDurationSec: e.audioDurationSec,
+          annCount: Object.keys(e.annotations || {}).length,
+        })),
+      );
+      setEntries(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
