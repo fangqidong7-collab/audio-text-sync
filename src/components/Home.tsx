@@ -10,6 +10,7 @@ import {
   relativeDate,
   type LibraryEntry,
 } from '../lib/library';
+import { extractDocxText } from '../lib/docxParse';
 import { extractPdfText, type PdfParseProgress } from '../lib/pdfParse';
 import { IconCheck, IconDoc, IconPlus, IconTrash } from './Icons';
 
@@ -65,9 +66,19 @@ export default function Home({ onOpen }: Props) {
       if (!entry) {
         const isPdf =
           file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-        const text = isPdf
-          ? await extractPdfText(file, setProgress)
-          : await file.text();
+        const isDocx =
+          /\.docx$/i.test(file.name) ||
+          file.type ===
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        const isDoc = /\.doc$/i.test(file.name) && !isDocx;
+        let text: string;
+        if (isPdf) {
+          text = await extractPdfText(file, setProgress);
+        } else if (isDocx || isDoc) {
+          text = await extractDocxText(file);
+        } else {
+          text = await file.text();
+        }
         if (!text.trim()) {
           throw new Error('未能从文档中提取到任何文字。');
         }
@@ -116,7 +127,7 @@ export default function Home({ onOpen }: Props) {
         <label className={`upload-card add-card ${parsing ? 'busy' : ''}`}>
           <input
             type="file"
-            accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+            accept=".txt,.md,.pdf,.docx,.doc,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
             onChange={(e) =>
               e.target.files && handleUpload(e.target.files[0])
             }
@@ -127,7 +138,7 @@ export default function Home({ onOpen }: Props) {
           </span>
           <span className="text">
             <span className="t">添加文档</span>
-            <span className="s">PDF / TXT / Markdown</span>
+            <span className="s">PDF / DOCX / TXT / Markdown</span>
           </span>
         </label>
 

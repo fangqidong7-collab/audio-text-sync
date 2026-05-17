@@ -114,45 +114,51 @@ export default function Player({ audioRef, currentTime, duration, disabled }: Pr
         </div>
       </div>
       <div className="player-row">
-        <span className="time time-l">{fmt(shownT)}</span>
-        <button
-          type="button"
-          className="iconbtn skip"
-          onClick={() => skip(-5)}
-          disabled={disabled}
-          aria-label="后退 5 秒"
-        >
-          <IconSkipBack size={18} />
-          <small className="skip-num">5</small>
-        </button>
-        <button
-          type="button"
-          className="iconbtn play"
-          onClick={toggle}
-          disabled={disabled}
-          aria-label={playing ? '暂停' : '播放'}
-        >
-          {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
-        </button>
-        <button
-          type="button"
-          className="iconbtn skip"
-          onClick={() => skip(5)}
-          disabled={disabled}
-          aria-label="前进 5 秒"
-        >
-          <IconSkipForward size={18} />
-          <small className="skip-num">5</small>
-        </button>
-        <button
-          type="button"
-          className="speed"
-          onClick={() => setSpeedIdx((i) => (i + 1) % SPEEDS.length)}
-          aria-label={`变速：${speedLabel}`}
-        >
-          {speedLabel}
-        </button>
-        <span className="time time-r">{fmt(duration)}</span>
+        <div className="player-side player-left">
+          <span className="time">{fmt(shownT)}</span>
+        </div>
+        <div className="player-center">
+          <button
+            type="button"
+            className="iconbtn skip"
+            onClick={() => skip(-5)}
+            disabled={disabled}
+            aria-label="后退 5 秒"
+          >
+            <IconSkipBack size={18} />
+            <small className="skip-num">5</small>
+          </button>
+          <button
+            type="button"
+            className="iconbtn play"
+            onClick={toggle}
+            disabled={disabled}
+            aria-label={playing ? '暂停' : '播放'}
+          >
+            {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
+          </button>
+          <button
+            type="button"
+            className="iconbtn skip"
+            onClick={() => skip(5)}
+            disabled={disabled}
+            aria-label="前进 5 秒"
+          >
+            <IconSkipForward size={18} />
+            <small className="skip-num">5</small>
+          </button>
+        </div>
+        <div className="player-side player-right">
+          <button
+            type="button"
+            className="speed"
+            onClick={() => setSpeedIdx((i) => (i + 1) % SPEEDS.length)}
+            aria-label={`变速：${speedLabel}`}
+          >
+            {speedLabel}
+          </button>
+          <span className="time">{fmt(duration)}</span>
+        </div>
       </div>
     </div>
   );

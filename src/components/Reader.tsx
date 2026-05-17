@@ -12,6 +12,7 @@ import {
   IconClose,
   IconHeadphones,
   IconPin,
+  IconPlay,
   IconRefresh,
 } from './Icons';
 import Player from './Player';
@@ -19,14 +20,6 @@ import Player from './Player';
 interface Props {
   initialEntry: LibraryEntry;
   onBack: () => void;
-}
-
-function fmtTime(t: number | undefined): string {
-  if (t === undefined || !Number.isFinite(t)) return '--:--';
-  const s = Math.max(0, Math.floor(t));
-  const mm = String(Math.floor(s / 60)).padStart(2, '0');
-  const ss = String(s % 60).padStart(2, '0');
-  return `${mm}:${ss}`;
 }
 
 // 调试日志开关：上线时改 false 即可。
@@ -357,25 +350,19 @@ export default function Reader({ initialEntry, onBack }: Props) {
   // 段落点击：
   // - 锚定模式 → 该段重锚到当前播放点（保持在锚定模式，由用户手动退出）
   // - 默认：单击跳转音频，双击重锚（250ms 内）
-  const clickTimerRef = useRef<number | null>(null);
+  // 段落点击行为现在大幅简化：
+  // - 锚定模式（顶栏图钉激活）→ 该段重锚到当前播放点
+  // - 其他情况 → 不做任何事，让单词点击和文本选择正常工作
+  // 跳转到该段播放由段落左侧的小播放按钮处理（onSegmentPlay）。
   function handleSegmentClick(seg: DocSegment) {
     if (anchorMode) {
       reAnchor(seg);
       return;
     }
-    if (!aligned) return;
-    // 没选音频时仅展示，不响应点击跳转/重锚（避免误触改动播放状态）
-    if (!audioFile) return;
-    if (clickTimerRef.current !== null) {
-      window.clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      reAnchor(seg);
-      return;
-    }
-    clickTimerRef.current = window.setTimeout(() => {
-      clickTimerRef.current = null;
-      jumpTo(seg);
-    }, 250);
+  }
+  function onSegmentPlay(seg: DocSegment, e: React.MouseEvent) {
+    e.stopPropagation();
+    jumpTo(seg);
   }
 
   async function handleWordClick(word: string) {
@@ -513,13 +500,20 @@ export default function Reader({ initialEntry, onBack }: Props) {
             title={
               anchorMode
                 ? '点此把当前播放点对齐到这一段'
-                : s.matched
-                  ? `${fmtTime(s.start)} – ${fmtTime(s.end)}\n单击：跳转音频\n双击：对齐当前播放点`
-                  : '请先选择音频以开始对齐'
+                : ''
             }
           >
-            {s.matched && (
-              <span className="seg-time">{fmtTime(s.start)}</span>
+            {s.matched && !noAudio && (
+              <button
+                type="button"
+                className="seg-play"
+                onClick={(e) => onSegmentPlay(s, e)}
+                disabled={anchorMode}
+                aria-label="跳到这一段开始播放"
+                title="跳到这一段"
+              >
+                <IconPlay size={11} />
+              </button>
             )}
             <AnnotatedText
               text={s.text}

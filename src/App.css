@@ -510,18 +510,41 @@ button { font-family: inherit; }
 }
 .segment.unmatched { color: var(--muted); }
 
-.seg-time {
-  display: inline-block;
-  font-family: -apple-system, system-ui, sans-serif;
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
+/* 段落左侧的小播放按钮：替代原先的时间戳 */
+.seg-play {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
   color: var(--muted);
+  cursor: pointer;
   margin-right: 8px;
-  vertical-align: 0.18em;
-  letter-spacing: 0.3px;
+  vertical-align: 0.05em;
+  flex: 0 0 auto;
+  transition: background 0.15s, border-color 0.15s, color 0.15s,
+              transform 0.08s;
+  -webkit-user-select: none;
   user-select: none;
 }
-.segment.active .seg-time { color: var(--accent); }
+.seg-play:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.seg-play:active { transform: scale(0.92); }
+.seg-play:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.segment.active .seg-play {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
 
 /* ============== 单词查英英释义 ============== */
 
@@ -637,21 +660,34 @@ button { font-family: inherit; }
   box-shadow: 0 1px 4px rgba(0,0,0,0.18);
 }
 
+/* 三栏：左信息 / 中控件 / 右信息。中间天然居中 */
 .player.compact .player-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-top: 2px;
 }
+.player.compact .player-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.player.compact .player-left { justify-self: start; }
+.player.compact .player-right { justify-self: end; }
+.player.compact .player-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .player.compact .time {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--muted);
-  min-width: 44px;
   letter-spacing: 0.3px;
 }
-.player.compact .time-l { text-align: left; }
-.player.compact .time-r { text-align: right; }
 
 .player.compact .iconbtn {
   width: 38px;
@@ -678,7 +714,6 @@ button { font-family: inherit; }
   background: var(--accent);
   color: #fff;
   box-shadow: 0 4px 14px var(--accent-glow);
-  margin: 0 2px;
 }
 .player.compact .iconbtn.play:hover { background: var(--accent-2); color: #fff; }
 
@@ -687,15 +722,14 @@ button { font-family: inherit; }
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text-soft);
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   height: 26px;
-  min-width: 36px;
-  margin-left: 2px;
+  min-width: 38px;
 }
 
 /* ============== 滚动条美化（桌面） ============== */
