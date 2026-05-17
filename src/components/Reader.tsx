@@ -22,53 +22,8 @@ interface Props {
   onBack: () => void;
 }
 
-// 调试日志开关：上线时改 false 即可。
-const DBG = true;
-
 export default function Reader({ initialEntry, onBack }: Props) {
   const [entry, setEntry] = useState<LibraryEntry>(initialEntry);
-
-  // 每个 Reader 实例分配一个短 ID，便于在 StrictMode/HMR 下区分日志归属。
-  const mountIdRef = useRef<string>(
-    Math.random().toString(36).slice(2, 6),
-  );
-  const log = (...a: unknown[]) => {
-    if (DBG) console.log('[ats]', `[${mountIdRef.current}]`, ...a);
-  };
-
-  useEffect(() => {
-    log('reader mount', {
-      hash: initialEntry.hash.slice(0, 8),
-      name: initialEntry.name,
-      lastPositionSec: initialEntry.lastPositionSec,
-      furthestPositionSec: initialEntry.furthestPositionSec,
-      audioDurationSec: initialEntry.audioDurationSec,
-      annCount: Object.keys(initialEntry.annotations || {}).length,
-    });
-    return () => log('reader unmount');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // entry 改动的"显著事件"日志（音频时长/释义数/读完状态）。
-  // 位置类的高频变化已经由 "entry update via timeupdate" 采样打印，不再重复。
-  const prevEntrySigRef = useRef(initialEntry);
-  useEffect(() => {
-    const prev = prevEntrySigRef.current;
-    prevEntrySigRef.current = entry;
-    const annPrev = Object.keys(prev.annotations).length;
-    const annNow = Object.keys(entry.annotations).length;
-    if (
-      prev.audioDurationSec !== entry.audioDurationSec ||
-      annPrev !== annNow ||
-      prev.finished !== entry.finished
-    ) {
-      log('entry significant change', {
-        dur: entry.audioDurationSec,
-        ann: annNow,
-        finished: entry.finished,
-      });
-    }
-  }, [entry]);
 
   // 进入文档时，即使还没选音频，也用上次保存的 audioDurationSec
   // 把段落预先对齐，并把 currentTime 推到上次离开的位置，
@@ -78,10 +33,6 @@ export default function Reader({ initialEntry, onBack }: Props) {
       initialEntry.audioDurationSec > 0 &&
       initialEntry.lastPositionSec > 0
     ) {
-      log('preload from saved progress', {
-        duration: initialEntry.audioDurationSec,
-        position: initialEntry.lastPositionSec,
-      });
       setDuration(initialEntry.audioDurationSec);
       setCurrentTime(initialEntry.lastPositionSec);
     }
@@ -113,15 +64,9 @@ export default function Reader({ initialEntry, onBack }: Props) {
     [audioFile],
   );
   useEffect(() => {
-    log('audioFile changed', audioFile ? {
-      name: audioFile.name,
-      size: audioFile.size,
-      type: audioFile.type,
-    } : null);
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
   // 拿到音频时长就立刻按字数均匀分布做对齐。
@@ -133,39 +78,27 @@ export default function Reader({ initialEntry, onBack }: Props) {
       );
       setSegments(out);
       setAligned(true);
-      log('aligned', { duration, segments: out.length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration]);
 
   // 尝试恢复到上次播放位置；onLoadedMetadata 与 onCanPlay 都会调用一次。
-  function tryResume(a: HTMLAudioElement, source: string) {
-    if (resumedRef.current) {
-      log('resume skipped (already resumed)', source);
-      return;
-    }
-    if (!Number.isFinite(a.duration) || a.duration <= 0) {
-      log('resume skipped (no duration)', source, a.duration);
-      return;
-    }
+  function tryResume(a: HTMLAudioElement) {
+    if (resumedRef.current) return;
+    if (!Number.isFinite(a.duration) || a.duration <= 0) return;
     const target = resumeTargetRef.current;
-    log('resume try', { source, target, duration: a.duration });
     if (target > 1 && target < a.duration - 5) {
       a.currentTime = target;
       setCurrentTime(target);
-      log('resume -> seek', target);
-    } else {
-      log('resume -> no seek (target outside range)', target);
     }
     resumedRef.current = true;
   }
 
   function handleLoadedMetadata(e: React.SyntheticEvent<HTMLAudioElement>) {
     const a = e.currentTarget;
-    log('loadedmetadata', { duration: a.duration });
     setDuration(a.duration);
     setEntry((prev) => ({ ...prev, audioDurationSec: a.duration }));
-    tryResume(a, 'loadedmetadata');
+    tryResume(a);
   }
 
   // 累计实际播放秒数：仅在 playing 且 currentTime 自然推进时计入。
@@ -192,16 +125,11 @@ export default function Reader({ initialEntry, onBack }: Props) {
     return () => window.clearInterval(timer);
   }, []);
 
-  // 进度回写到 entry。注意：恢复完成前不能允许 timeupdate 把 lastPositionSec 写成 0。
-  // 用计数器避免每次 timeupdate 都打日志（约 4 次/秒）；每 5 次打一次。
-  const tuLogRef = useRef(0);
+  // 进度回写到 entry。
+  // 关键：恢复完成前（resumedRef.current === false）不允许 timeupdate
+  // 把 lastPositionSec 改写成 0，否则保存的进度会被瞬间覆盖丢失。
   useEffect(() => {
-    if (!resumedRef.current) {
-      if (tuLogRef.current++ % 20 === 0) {
-        log('timeupdate skipped (not resumed yet)', currentTime);
-      }
-      return;
-    }
+    if (!resumedRef.current) return;
     if (currentTime <= 0) return;
     setEntry((prev) => {
       const furthest = Math.max(prev.furthestPositionSec, currentTime);
@@ -215,13 +143,6 @@ export default function Reader({ initialEntry, onBack }: Props) {
       ) {
         return prev;
       }
-      if (tuLogRef.current++ % 20 === 0) {
-        log('entry update via timeupdate', {
-          currentTime: Number(currentTime.toFixed(2)),
-          furthest: Number(furthest.toFixed(2)),
-          finished,
-        });
-      }
       return {
         ...prev,
         lastPositionSec: currentTime,
@@ -234,47 +155,34 @@ export default function Reader({ initialEntry, onBack }: Props) {
 
   // 持久化策略：用 ref 镜像最新 entry；每 2 秒节流落盘，
   // 卸载和页面隐藏时同步再写一次。
-  // （之前的"防抖 600ms"在持续播放时永远被新 timeupdate 清掉，导致根本写不到 IDB。）
+  // （早期版本的"防抖 600ms"在持续播放时被每次 timeupdate 抢先清掉，
+  //   导致根本写不到 IDB。）
   const entryRef = useRef(entry);
   entryRef.current = entry;
 
   useEffect(() => {
-    log('flusher mounted');
     let lastSaved: LibraryEntry = entryRef.current;
-    const tryFlush = (reason: string) => {
+    const tryFlush = () => {
       const cur = entryRef.current;
-      if (cur === lastSaved) {
-        log('flush skipped (no change)', reason);
-        return;
-      }
+      if (cur === lastSaved) return;
       lastSaved = cur;
-      log('flush -> putEntry', reason, {
-        lastPositionSec: Number(cur.lastPositionSec.toFixed(2)),
-        furthestPositionSec: Number(cur.furthestPositionSec.toFixed(2)),
-        audioDurationSec: cur.audioDurationSec,
-        annCount: Object.keys(cur.annotations || {}).length,
+      putEntry(cur).catch((e) => {
+        console.error('保存进度失败：', e);
       });
-      putEntry(cur)
-        .then(() => log('putEntry ok'))
-        .catch((e) => {
-          console.error('[ats] 保存进度失败：', e);
-        });
     };
-    const intervalId = window.setInterval(() => tryFlush('interval'), 2000);
+    const intervalId = window.setInterval(tryFlush, 2000);
 
-    const onHide = () => {
-      if (document.hidden) tryFlush('visibilitychange');
+    const onVis = () => {
+      if (document.hidden) tryFlush();
     };
-    const onPageHide = () => tryFlush('pagehide');
-    document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', tryFlush);
 
     return () => {
-      log('flusher unmount');
       window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', onPageHide);
-      tryFlush('unmount');
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', tryFlush);
+      tryFlush();
     };
   }, []);
 
@@ -498,7 +406,7 @@ export default function Reader({ initialEntry, onBack }: Props) {
         preload="metadata"
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={handleLoadedMetadata}
-        onCanPlay={(e) => tryResume(e.currentTarget, 'canplay')}
+        onCanPlay={(e) => tryResume(e.currentTarget)}
         style={{ display: 'none' }}
       />
 
