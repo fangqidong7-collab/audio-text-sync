@@ -189,6 +189,44 @@ button { font-family: inherit; }
 .vocab-pill:hover { border-color: var(--accent); color: var(--accent); }
 .vocab-pill .vocab-count { color: var(--accent); }
 
+/* ============== 顶部 Tab 栏 ============== */
+
+.tabbar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  margin: 4px 0 12px;
+  position: relative;
+}
+.tabbar .tab {
+  appearance: none;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+}
+.tabbar .tab:hover { color: var(--text-soft); }
+.tabbar .tab.active {
+  background: var(--panel);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ============== Home 主屏 ============== */
 
 .home-main {
@@ -377,6 +415,362 @@ button { font-family: inherit; }
   font-size: 13px;
   margin: 0 0 10px;
 }
+
+/* ============== 词汇表 ============== */
+
+.vocab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vocab-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 14px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.vocab-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.vocab-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.vocab-stat:first-child .vocab-stat-num { color: var(--good); }
+.vocab-stat-lab {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+
+.vocab-progress {
+  height: 6px;
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.vocab-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--good), color-mix(in srgb, var(--good) 60%, var(--accent) 40%));
+  transition: width 0.3s ease;
+}
+
+.vocab-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.size-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.size-pick select {
+  appearance: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px 28px 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' stroke='%238e7d63' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.btn-primary {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--accent-glow);
+  transition: background 0.15s, transform 0.08s, box-shadow 0.2s;
+}
+.btn-primary:hover { background: var(--accent-2); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.vocab-actions .btn-primary { margin-left: auto; }
+
+.vocab-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vocab-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s, opacity 0.2s;
+}
+.vocab-item.mastered { opacity: 0.62; }
+.vocab-item.mastered .vocab-word {
+  text-decoration: line-through;
+  text-decoration-color: var(--good);
+  text-decoration-thickness: 2px;
+}
+
+.vocab-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.vocab-word {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text);
+}
+.vocab-phon {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+.vocab-pos {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.vocab-toggle {
+  appearance: none;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.vocab-toggle:hover {
+  border-color: var(--good);
+  color: var(--good);
+}
+.vocab-toggle.on {
+  background: var(--good);
+  border-color: var(--good);
+  color: #fff;
+}
+
+.vocab-def {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+.vocab-sources {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.vocab-reset {
+  appearance: none;
+  align-self: center;
+  margin: 8px 0 4px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  cursor: pointer;
+}
+.vocab-reset:hover { color: var(--error); border-color: var(--error); }
+
+/* ============== 复习卡片 ============== */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 4px;
+}
+.review-empty,
+.review-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 36px 16px 24px;
+  text-align: center;
+  color: var(--text-soft);
+}
+.review-done-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.review-done-score {
+  font-size: 44px;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+.review-done-sub {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.review-progress {
+  flex: 1 1 auto;
+  height: 4px;
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.review-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.review-step {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4px;
+  flex: 0 0 auto;
+}
+
+.review-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 18px 16px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.review-word {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.5px;
+  font-family: ui-serif, Georgia, serif;
+  margin-top: 6px;
+}
+.review-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+
+.review-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.review-option {
+  appearance: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s;
+}
+.review-option:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.review-option:active:not(:disabled) { transform: scale(0.99); }
+.review-option:disabled { cursor: default; }
+.review-option-text { flex: 1 1 auto; }
+.review-pos {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-right: 6px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.review-option.correct {
+  border-color: var(--good);
+  background: rgba(74, 138, 74, 0.10);
+  color: var(--text);
+}
+.review-option.wrong {
+  border-color: var(--error);
+  background: rgba(192, 57, 43, 0.10);
+}
+.review-mark {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  margin-top: 1px;
+}
+.review-mark.good { background: var(--good); }
+.review-mark.bad { background: var(--error); }
+
+.review .btn-primary { align-self: flex-end; }
 
 /* ============== Reader 视图 ============== */
 

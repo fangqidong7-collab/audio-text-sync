@@ -85,6 +85,40 @@ export const IconBook = (p: Props) => (
   </Svg>
 );
 
+export const IconShelf = (p: Props) => (
+  <Svg {...p}>
+    <rect x="3" y="3" width="6" height="18" rx="1.4" />
+    <rect x="11" y="6" width="5" height="15" rx="1.4" />
+    <path d="M17.5 8.5l3.4-1.1 2 11.4-3.4 1z" />
+  </Svg>
+);
+
+export const IconNotebook = (p: Props) => (
+  <Svg {...p}>
+    <path d="M4 4a2 2 0 0 1 2-2h13v20H6a2 2 0 0 1-2-2z" />
+    <line x1="4" y1="7" x2="3" y2="7" />
+    <line x1="4" y1="12" x2="3" y2="12" />
+    <line x1="4" y1="17" x2="3" y2="17" />
+    <line x1="9" y1="8" x2="15" y2="8" />
+    <line x1="9" y1="12" x2="13" y2="12" />
+  </Svg>
+);
+
+export const IconSparkles = (p: Props) => (
+  <Svg {...p}>
+    <path d="M12 3l1.6 4.8L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.2z" />
+    <path d="M19 14l.8 1.8L21 17l-1.4.6L19 19l-.8-1.4L17 17l1.4-.8z" />
+    <path d="M6 16l.6 1.4L8 18l-1.4.4L6 20l-.6-1.6L4 18l1.4-.6z" />
+  </Svg>
+);
+
+export const IconArrowRight = (p: Props) => (
+  <Svg {...p}>
+    <line x1="5" y1="12" x2="19" y2="12" />
+    <polyline points="13 6 19 12 13 18" />
+  </Svg>
+);
+
 export const IconCheck = (p: Props) => (
   <Svg {...p}>
     <polyline points="20 6 9 17 4 12" />

@@ -4,8 +4,10 @@
 //
 // 主键：文档 SHA-256 hash（基于原始文件字节）
 // 通过 hash 去重：再次上传同一份文档会直接打开旧条目。
+//
+// V2 起新增 vocab_mastery store：跨文档全局词汇掌握状态。
 
-import type { DictResult } from './dict';
+import type { DictEntry, DictResult } from './dict';
 
 export interface LibraryEntry {
   hash: string;
@@ -22,9 +24,23 @@ export interface LibraryEntry {
   annotations: Record<string, DictResult>; // 已查释义（不含 'loading' 临时状态）
 }
 
+export interface VocabMasteryRecord {
+  word: string; // 小写，作为主键
+  masteredAt: number; // 标为已掌握的时间
+}
+
+export interface VocabItem {
+  word: string;
+  result: DictEntry; // 仅含查到释义的词，'not-found' 不进入词汇表
+  sources: string[]; // 出自哪些文档名（去重）
+  mastered: boolean;
+  masteredAt?: number;
+}
+
 const DB_NAME = 'audio-text-sync';
 const STORE = 'library';
-const DB_VERSION = 1;
+const VOCAB_STORE = 'vocab_mastery';
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 function openDB(): Promise<IDBDatabase> {
@@ -35,6 +51,9 @@ function openDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'hash' });
+      }
+      if (!db.objectStoreNames.contains(VOCAB_STORE)) {
+        db.createObjectStore(VOCAB_STORE, { keyPath: 'word' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -129,6 +148,73 @@ export function progressOf(entry: LibraryEntry): number {
     0,
     Math.min(1, entry.furthestPositionSec / entry.audioDurationSec),
   );
+}
+
+// ============== 词汇掌握状态 ==============
+
+export async function listMastery(): Promise<Map<string, VocabMasteryRecord>> {
+  const db = await openDB();
+  const list =
+    (await idbRequest(
+      db
+        .transaction(VOCAB_STORE, 'readonly')
+        .objectStore(VOCAB_STORE)
+        .getAll() as IDBRequest<VocabMasteryRecord[]>,
+    )) ?? [];
+  const m = new Map<string, VocabMasteryRecord>();
+  for (const r of list) m.set(r.word, r);
+  return m;
+}
+
+export async function setMastered(word: string, mastered: boolean): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(VOCAB_STORE, 'readwrite');
+  const key = word.toLowerCase();
+  if (mastered) {
+    tx.objectStore(VOCAB_STORE).put({ word: key, masteredAt: Date.now() });
+  } else {
+    tx.objectStore(VOCAB_STORE).delete(key);
+  }
+  await idbTx(tx);
+}
+
+export async function clearAllMastery(): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(VOCAB_STORE, 'readwrite');
+  tx.objectStore(VOCAB_STORE).clear();
+  await idbTx(tx);
+}
+
+// 把所有文档里查过的英文释义聚合成一份全局词汇表。
+// - 'not-found' 词被丢弃（没东西可复习）
+// - 同一个词出现在多个文档里，sources 合并去重
+export async function listVocab(): Promise<VocabItem[]> {
+  const [entries, mastery] = await Promise.all([
+    listEntries(),
+    listMastery(),
+  ]);
+  const map = new Map<string, VocabItem>();
+  for (const e of entries) {
+    const ann = e.annotations || {};
+    for (const [w, r] of Object.entries(ann)) {
+      if (r === 'not-found') continue;
+      const key = w.toLowerCase();
+      const m = mastery.get(key);
+      const exist = map.get(key);
+      if (exist) {
+        if (!exist.sources.includes(e.name)) exist.sources.push(e.name);
+      } else {
+        map.set(key, {
+          word: key,
+          result: r,
+          sources: [e.name],
+          mastered: !!m,
+          masteredAt: m?.masteredAt,
+        });
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => a.word.localeCompare(b.word));
 }
 
 export function relativeDate(ts: number): string {

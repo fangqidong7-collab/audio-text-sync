@@ -12,7 +12,15 @@ import {
 } from '../lib/library';
 import { extractDocxText } from '../lib/docxParse';
 import { extractPdfText, type PdfParseProgress } from '../lib/pdfParse';
-import { IconCheck, IconDoc, IconPlus, IconTrash } from './Icons';
+import {
+  IconCheck,
+  IconDoc,
+  IconNotebook,
+  IconPlus,
+  IconShelf,
+  IconTrash,
+} from './Icons';
+import Vocab from './Vocab';
 
 interface Props {
   onOpen: (entry: LibraryEntry) => void;
@@ -26,7 +34,10 @@ function fmtTime(t: number): string {
   return `${mm}:${ss}`;
 }
 
+type Tab = 'docs' | 'vocab';
+
 export default function Home({ onOpen }: Props) {
+  const [tab, setTab] = useState<Tab>('docs');
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [parsing, setParsing] = useState(false);
@@ -119,17 +130,86 @@ export default function Home({ onOpen }: Props) {
       <header className="app-header">
         <h1>同读</h1>
         <span className="meta">
-          {loading ? '…' : `${entries.length} 篇`}
+          {tab === 'docs'
+            ? loading
+              ? '…'
+              : `${entries.length} 篇`
+            : '词汇表'}
         </span>
       </header>
 
+      <div className="tabbar" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'docs'}
+          className={`tab ${tab === 'docs' ? 'active' : ''}`}
+          onClick={() => setTab('docs')}
+        >
+          <IconShelf size={16} />
+          书架
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'vocab'}
+          className={`tab ${tab === 'vocab' ? 'active' : ''}`}
+          onClick={() => setTab('vocab')}
+        >
+          <IconNotebook size={16} />
+          单词
+        </button>
+      </div>
+
       <main className="home-main">
-        <label className={`upload-card add-card ${parsing ? 'busy' : ''}`}>
+        {tab === 'vocab' ? (
+          <Vocab />
+        ) : (
+          <DocsPane
+            loading={loading}
+            entries={entries}
+            parsing={parsing}
+            progress={progress}
+            error={error}
+            onUpload={handleUpload}
+            onDelete={handleDelete}
+            onOpen={onOpen}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+interface DocsPaneProps {
+  loading: boolean;
+  entries: LibraryEntry[];
+  parsing: boolean;
+  progress: PdfParseProgress | null;
+  error: string | null;
+  onUpload: (file: File) => void;
+  onDelete: (hash: string, name: string) => void;
+  onOpen: (entry: LibraryEntry) => void;
+}
+
+function DocsPane({
+  loading,
+  entries,
+  parsing,
+  progress,
+  error,
+  onUpload,
+  onDelete,
+  onOpen,
+}: DocsPaneProps) {
+  return (
+    <>
+      <label className={`upload-card add-card ${parsing ? 'busy' : ''}`}>
           <input
             type="file"
             accept=".txt,.md,.pdf,.docx,.doc,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
             onChange={(e) =>
-              e.target.files && handleUpload(e.target.files[0])
+              e.target.files && onUpload(e.target.files[0])
             }
             disabled={parsing}
           />
@@ -199,7 +279,7 @@ export default function Home({ onOpen }: Props) {
                     aria-label="删除"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(entry.hash, entry.name);
+                      onDelete(entry.hash, entry.name);
                     }}
                   >
                     <IconTrash size={16} />
@@ -237,7 +317,6 @@ export default function Home({ onOpen }: Props) {
             );
           })}
         </ul>
-      </main>
-    </div>
+    </>
   );
 }
