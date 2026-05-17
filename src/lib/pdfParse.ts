@@ -70,29 +70,17 @@ function detectRepeatedHeaderFooter(pages: PageData[]): Set<string> {
   return repeated;
 }
 
-// 收集"全文档反复出现的旋转文字" → 水印。即便没旋转，整本相同短串也大概率是水印。
+// 收集**旋转文字**字符串作为水印。
+// 注意：不再用"重复出现次数"来判定水印——小说里 the / a / Mole / Rat 这种
+// 高频词会被误伤掉。真正的水印几乎一定是旋转的（45° 斜放），仅靠这一点就够。
 function detectWatermarks(pages: PageData[]): Set<string> {
-  const rotatedCounts = new Map<string, number>();
-  const allCounts = new Map<string, number>();
-  let totalItems = 0;
+  const wm = new Set<string>();
   for (const p of pages) {
     for (const it of p.items) {
+      if (!isRotated(it.transform)) continue;
       const k = it.str.trim();
       if (k.length === 0) continue;
-      totalItems++;
-      allCounts.set(k, (allCounts.get(k) ?? 0) + 1);
-      if (isRotated(it.transform)) {
-        rotatedCounts.set(k, (rotatedCounts.get(k) ?? 0) + 1);
-      }
-    }
-  }
-  const wm = new Set<string>();
-  // 任何旋转出现过 ≥1 次的字符串都加进去（水印基本都是旋转的）。
-  for (const [s] of rotatedCounts) wm.add(s);
-  // 同一短串（≤20 字）在全文重复出现 ≥pages*0.6 次也视为水印。
-  for (const [s, c] of allCounts) {
-    if (s.length <= 20 && c >= Math.max(3, pages.length * 0.6) && totalItems > 0) {
-      wm.add(s);
+      wm.add(k);
     }
   }
   return wm;
@@ -163,10 +151,10 @@ export async function extractPdfText(
 
       // ---- 噪声过滤 ----
       if (isRotated(it.transform)) continue; // 水印（旋转文字）
-      if (trimmed.length > 0 && watermarks.has(trimmed)) continue; // 水印（重复短串）
+      if (trimmed.length > 0 && watermarks.has(trimmed)) continue; // 旋转水印的同串非旋转影子
       if (inHeader(y, p.height) || inFooter(y, p.height)) {
-        if (repeatedHF.has(trimmed)) continue;
-        if (isPageNumber(trimmed)) continue;
+        if (repeatedHF.has(trimmed)) continue; // 多页同位置重复 = 页眉页脚
+        if (isPageNumber(trimmed)) continue; // 数字 / 第 X 页 / Page X
       }
       if (trimmed.length === 0 && it.str.length === 0) continue;
 
