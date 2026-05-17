@@ -902,7 +902,10 @@ button { font-family: inherit; }
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent-glow);
 }
-.segment.unmatched { color: var(--muted); }
+/* 未对齐的段落不再变灰，正文一律使用 .reader 设定的黑色。
+   是否能跳转/高亮，由左侧"播放按钮"是否出现来表达。*/
+.segment.unmatched { cursor: text; }
+.segment.unmatched:hover { background: transparent; }
 
 /* 段落左侧的小播放按钮：替代原先的时间戳 */
 .seg-play {
