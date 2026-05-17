@@ -6,7 +6,11 @@ import {
   type DocSegment,
 } from './lib/aligner';
 import { extractPdfText, type PdfParseProgress } from './lib/pdfParse';
+import { lookupWord } from './lib/dict';
 import Player from './components/Player';
+import AnnotatedText, {
+  type AnnotationState,
+} from './components/AnnotatedText';
 
 function fmtTime(t: number | undefined): string {
   if (t === undefined || !Number.isFinite(t)) return '--:--';
@@ -25,6 +29,9 @@ export default function App() {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aligned, setAligned] = useState(false);
+  const [annotations, setAnnotations] = useState<
+    Record<string, AnnotationState>
+  >({});
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const readerRef = useRef<HTMLDivElement>(null);
@@ -176,6 +183,37 @@ export default function App() {
     });
   }
 
+  // 点词查英英释义；再次点击同一个词即取消标注。
+  async function handleWordClick(word: string) {
+    const lc = word.toLowerCase();
+    const current = annotations[lc];
+    if (current === 'loading') return;
+    if (current !== undefined) {
+      setAnnotations((prev) => {
+        const next = { ...prev };
+        delete next[lc];
+        return next;
+      });
+      return;
+    }
+    setAnnotations((prev) => ({ ...prev, [lc]: 'loading' }));
+    try {
+      const r = await lookupWord(word);
+      setAnnotations((prev) => ({ ...prev, [lc]: r }));
+    } catch (e) {
+      setAnnotations((prev) => {
+        const next = { ...prev };
+        delete next[lc];
+        return next;
+      });
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function clearAnnotations() {
+    setAnnotations({});
+  }
+
   // 单击 vs 双击：250ms 计时器区分。
   const clickTimerRef = useRef<number | null>(null);
   function handleSegmentClick(seg: DocSegment) {
@@ -205,7 +243,7 @@ export default function App() {
         <h1>音画同步阅读器</h1>
         <span className="meta">
           {hasReader && aligned
-            ? `${segments.length} 段 · 单击跳转 · 双击对齐`
+            ? `${segments.length} 段 · 双击对齐 · 点词查释义`
             : hasReader
               ? '点击"开始对齐"进入阅读'
               : '上传文档和音频即可开始'}
@@ -290,8 +328,8 @@ export default function App() {
                 </label>
               </div>
 
-              {!aligned && (
-                <div className="actions">
+              <div className="actions">
+                {!aligned && (
                   <button
                     className="primary"
                     disabled={!ready || aligning || parsing}
@@ -299,15 +337,24 @@ export default function App() {
                   >
                     {aligning ? '对齐中…' : '开始对齐'}
                   </button>
-                  {parsing && (
-                    <span style={{ color: 'var(--muted)', fontSize: 13 }}>
-                      {pdfProgress
-                        ? `解析 PDF ${pdfProgress.page}/${pdfProgress.totalPages}`
-                        : '解析文档…'}
-                    </span>
-                  )}
-                </div>
-              )}
+                )}
+                {parsing && (
+                  <span style={{ color: 'var(--muted)', fontSize: 13 }}>
+                    {pdfProgress
+                      ? `解析 PDF ${pdfProgress.page}/${pdfProgress.totalPages}`
+                      : '解析文档…'}
+                  </span>
+                )}
+                {Object.keys(annotations).length > 0 && (
+                  <button
+                    className="ghost"
+                    onClick={clearAnnotations}
+                    style={{ marginLeft: 'auto' }}
+                  >
+                    清空标注（{Object.keys(annotations).length}）
+                  </button>
+                )}
+              </div>
             </div>
 
             {parsing && <ParseProgress pdfProgress={pdfProgress} />}
@@ -333,7 +380,11 @@ export default function App() {
                   {s.matched && (
                     <span className="seg-time">{fmtTime(s.start)}</span>
                   )}
-                  {s.text}
+                  <AnnotatedText
+                    text={s.text}
+                    annotations={annotations}
+                    onWordClick={handleWordClick}
+                  />
                 </p>
               ))}
             </div>
