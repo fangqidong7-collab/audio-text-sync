@@ -6,12 +6,13 @@
 // 通过 hash 去重：再次上传同一份文档会直接打开旧条目。
 //
 // V2 起新增 vocab_mastery store：跨文档全局词汇掌握状态。
+// V3 起新增 groups store：文档分组。
 
 import type { DictEntry, DictResult } from './dict';
 
 export interface LibraryEntry {
   hash: string;
-  name: string; // 文件名（仅用于显示）
+  name: string; // 文件名（仅用于显示，可由用户重命名）
   size: number; // 原始文件字节数
   text: string; // 提取后的纯文本，进入阅读时由 splitParagraphs 重新切段
   createdAt: number; // 第一次上传时间
@@ -22,6 +23,14 @@ export interface LibraryEntry {
   totalListenSec: number; // 累计实际播放时长
   finished: boolean; // 是否读完（furthest / duration ≥ 0.95）
   annotations: Record<string, DictResult>; // 已查释义（不含 'loading' 临时状态）
+  groupId?: string; // 所属分组 id，缺省 = 未分组（与"全部"一同显示）
+}
+
+export interface GroupRecord {
+  id: string; // 短随机 id
+  name: string;
+  createdAt: number;
+  order: number; // 自定义排序
 }
 
 export interface VocabMasteryRecord {
@@ -40,7 +49,8 @@ export interface VocabItem {
 const DB_NAME = 'audio-text-sync';
 const STORE = 'library';
 const VOCAB_STORE = 'vocab_mastery';
-const DB_VERSION = 2;
+const GROUP_STORE = 'groups';
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 function openDB(): Promise<IDBDatabase> {
@@ -54,6 +64,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(VOCAB_STORE)) {
         db.createObjectStore(VOCAB_STORE, { keyPath: 'word' });
+      }
+      if (!db.objectStoreNames.contains(GROUP_STORE)) {
+        db.createObjectStore(GROUP_STORE, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -148,6 +161,133 @@ export function progressOf(entry: LibraryEntry): number {
     0,
     Math.min(1, entry.furthestPositionSec / entry.audioDurationSec),
   );
+}
+
+// ============== 分组 / 重命名 ==============
+
+function shortId(): string {
+  return (
+    Math.random().toString(36).slice(2, 8) +
+    Date.now().toString(36).slice(-3)
+  );
+}
+
+export async function listGroups(): Promise<GroupRecord[]> {
+  const db = await openDB();
+  const list =
+    (await idbRequest(
+      db
+        .transaction(GROUP_STORE, 'readonly')
+        .objectStore(GROUP_STORE)
+        .getAll() as IDBRequest<GroupRecord[]>,
+    )) ?? [];
+  list.sort(
+    (a, b) => a.order - b.order || a.createdAt - b.createdAt,
+  );
+  return list;
+}
+
+export async function createGroup(name: string): Promise<GroupRecord> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('分组名不能为空');
+  const existing = await listGroups();
+  const maxOrder = existing.reduce((m, g) => Math.max(m, g.order), -1);
+  const rec: GroupRecord = {
+    id: shortId(),
+    name: trimmed,
+    createdAt: Date.now(),
+    order: maxOrder + 1,
+  };
+  const db = await openDB();
+  const tx = db.transaction(GROUP_STORE, 'readwrite');
+  tx.objectStore(GROUP_STORE).put(rec);
+  await idbTx(tx);
+  return rec;
+}
+
+export async function renameGroup(id: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('分组名不能为空');
+  const db = await openDB();
+  const tx = db.transaction(GROUP_STORE, 'readwrite');
+  const store = tx.objectStore(GROUP_STORE);
+  const cur = await idbRequest(
+    store.get(id) as IDBRequest<GroupRecord | undefined>,
+  );
+  if (!cur) {
+    await idbTx(tx);
+    return;
+  }
+  store.put({ ...cur, name: trimmed });
+  await idbTx(tx);
+}
+
+// 删除分组：
+// - mode='release'  → 仅删除分组，里面的文档 groupId 置 undefined（落到"全部"）
+// - mode='cascade'  → 把分组下所有文档也一并删除
+export async function deleteGroup(
+  id: string,
+  mode: 'release' | 'cascade',
+): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction([STORE, GROUP_STORE], 'readwrite');
+  const lib = tx.objectStore(STORE);
+  const grp = tx.objectStore(GROUP_STORE);
+  const all =
+    (await idbRequest(lib.getAll() as IDBRequest<LibraryEntry[]>)) ?? [];
+  for (const entry of all) {
+    if (entry.groupId !== id) continue;
+    if (mode === 'cascade') {
+      lib.delete(entry.hash);
+    } else {
+      const next: LibraryEntry = { ...entry };
+      delete next.groupId;
+      lib.put(next);
+    }
+  }
+  grp.delete(id);
+  await idbTx(tx);
+}
+
+export async function moveEntryToGroup(
+  hash: string,
+  groupId: string | undefined,
+): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(STORE, 'readwrite');
+  const store = tx.objectStore(STORE);
+  const entry = await idbRequest(
+    store.get(hash) as IDBRequest<LibraryEntry | undefined>,
+  );
+  if (!entry) {
+    await idbTx(tx);
+    return;
+  }
+  const next: LibraryEntry = { ...entry };
+  if (groupId) next.groupId = groupId;
+  else delete next.groupId;
+  store.put(next);
+  await idbTx(tx);
+}
+
+export async function renameEntry(
+  hash: string,
+  name: string,
+): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('文件名不能为空');
+  const db = await openDB();
+  const tx = db.transaction(STORE, 'readwrite');
+  const store = tx.objectStore(STORE);
+  const entry = await idbRequest(
+    store.get(hash) as IDBRequest<LibraryEntry | undefined>,
+  );
+  if (!entry) {
+    await idbTx(tx);
+    return;
+  }
+  store.put({ ...entry, name: trimmed });
+  await idbTx(tx);
 }
 
 // ============== 词汇掌握状态 ==============

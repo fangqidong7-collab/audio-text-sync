@@ -347,12 +347,19 @@ button { font-family: inherit; }
   border-radius: var(--radius-pill);
   padding: 2px 8px;
 }
-.entry-del {
+.entry-actions {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.entry-action {
   appearance: none;
   background: transparent;
   border: none;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   cursor: pointer;
   color: var(--muted);
@@ -362,7 +369,173 @@ button { font-family: inherit; }
   flex: 0 0 auto;
   transition: background 0.15s, color 0.15s;
 }
-.entry-del:hover { background: rgba(192, 57, 43, 0.10); color: var(--error); }
+.entry-action:hover { background: var(--panel-2); color: var(--text); }
+.entry-action.danger:hover { background: rgba(192, 57, 43, 0.10); color: var(--error); }
+
+.entry-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* —— 分组筛选条 —— */
+.group-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin: 0 0 12px;
+  padding: 2px 2px 4px;
+}
+.group-bar::-webkit-scrollbar { display: none; }
+
+.group-chip {
+  flex: 0 0 auto;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  height: 32px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.group-chip:hover { border-color: var(--accent); color: var(--text); }
+.group-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.group-chip.has-menu { padding: 0; gap: 0; overflow: visible; }
+.group-chip.has-menu .group-chip-body {
+  appearance: none;
+  background: transparent;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px 6px 12px;
+  height: 30px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.group-chip.has-menu .group-chip-arrow {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  margin-left: 2px;
+  padding: 0 8px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: inherit;
+  border-top-right-radius: var(--radius-pill);
+  border-bottom-right-radius: var(--radius-pill);
+}
+.group-chip.has-menu .group-chip-arrow:hover { background: var(--panel-2); }
+.group-chip.active .group-chip-arrow { border-left-color: var(--accent); }
+.group-chip-name { font-weight: 500; }
+.group-chip-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.group-chip.active .group-chip-count { color: var(--accent); }
+.group-chip.add {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+  color: var(--muted);
+}
+.group-chip.add:hover { color: var(--accent); }
+
+/* —— 通用 popover 菜单 —— */
+.popover-menu {
+  position: absolute;
+  z-index: 30;
+  min-width: 160px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+.popover-menu.group-menu {
+  top: calc(100% + 6px);
+  right: 0;
+}
+.popover-menu.move-menu {
+  top: calc(100% + 6px);
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.popover-menu .menu-title {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.popover-menu .menu-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: normal;
+}
+.popover-menu button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 8px 10px;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.popover-menu button:hover { background: var(--panel-2); color: var(--text); }
+.popover-menu button.active { color: var(--accent); background: var(--accent-soft); }
+.popover-menu button.danger { color: var(--error); }
+.popover-menu button.danger:hover { background: rgba(192, 57, 43, 0.10); }
+.popover-menu button .hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
 
 .entry-progress-bar {
   height: 4px;
